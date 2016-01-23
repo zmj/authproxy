@@ -59,6 +59,13 @@ func (a *Auth) Finish(resp *AuthSuccess) {
 	a.Content = resp.Content
 }
 
+func (a *Auth) ExpiresAt() time.Time {
+	if a.IsFinished() {
+		return a.Finished.Add(ExpireAuth)
+	}
+	return a.Started.Add(ExpireAuth)
+}
+
 func NewAuth() *Auth {
 	return &Auth{
 		Id:      NewId(),
@@ -122,13 +129,7 @@ func (c *Cache) Cache() {
 		case <-cleanup:
 			for id, auth := range auths {
 				auth.SendTimeouts()
-				var expireAt time.Time
-				if auth.IsFinished() {
-					expireAt = auth.Finished.Add(ExpireAuth)
-				} else {
-					expireAt = auth.Started.Add(ExpireAuth)
-				}
-				if expireAt.Before(time.Now()) {
+				if auth.ExpiresAt().Before(time.Now()) {
 					delete(auths, id)
 				}
 			}
@@ -136,6 +137,9 @@ func (c *Cache) Cache() {
 	}
 }
 
+var lastAuthId = 0 // randomize this
+
 func NewId() AuthId {
-	return 0
+	lastAuthId += 1
+	return AuthId(lastAuthId)
 }
