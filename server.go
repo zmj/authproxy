@@ -2,13 +2,21 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 )
 
 const (
 	PollPrefix     = "/authproxy/poll"
 	CompletePrefix = "/authproxy/complete"
 	NewAuthPrefix  = "/authproxy/auth"
+
+	AuthIdKey      = "apid"
+	LoginUrlKey    = "loginurl"
+	RedirectUrlKey = "redirecturlkey"
+
+	ClosePage = `<html><script>window.close();</script></html>`
 )
 
 func main() {
@@ -26,18 +34,51 @@ type Server struct {
 }
 
 func (s *Server) NewAuth(wr http.ResponseWriter, req *http.Request) {
-	fmt.Println("auth")
-	http.Error(wr, "nyi", http.StatusNotImplemented)
+	c := make(chan AuthId)
+	s.Cache.NewAuthRequests <- &NewAuthRequest{c}
+	id := <-c
+	loginUrl, err := url.ParseRequestURI(req.URL.Query().Get(LoginUrlKey))
+	if err != nil {
+		http.Error(wr, err.Error(), http.StatusBadRequest)
+		return
+	}
+	redirectParamName := req.URL.Query().Get(RedirectUrlKey)
+	redirectUrl := fmt.Sprintf("%v%v?%v=%v", req.Host, CompletePrefix, AuthIdKey, id)
+	q := loginUrl.Query()
+	q.Set(redirectParamName, redirectUrl)
+	loginUrl.RawQuery = q.Encode()
+	http.Redirect(wr, req, loginUrl.String(), http.StatusFound)
 }
 
 func (s *Server) Poll(wr http.ResponseWriter, req *http.Request) {
-	fmt.Println("poll")
-	http.Error(wr, "nyi", http.StatusNotImplemented)
+	id, err := ParseId(req.URL.Query().Get(AuthIdKey))
+	if err != nil {
+		http.Error(wr, err.Error(), http.StatusBadRequest)
+		return
+	}
+	c := make(chan *PollResponse)
+	s.Cache.PollRequests <- &PollRequest{Id: id, Response: c}
+	resp := <-c
+	if !resp.Found {
+		http.Error(wr, "nope", http.StatusUnauthorized)
+		return
+	}
+	resp.Content.WriteTo(wr)
 }
 
 func (s *Server) Complete(wr http.ResponseWriter, req *http.Request) {
-	fmt.Println("complete")
-	http.Error(wr, "nyi", http.StatusNotImplemented)
+	values := req.URL.Query()
+	id, err := ParseId(values.Get(AuthIdKey))
+	if err != nil {
+		http.Error(wr, err.Error(), http.StatusBadRequest)
+		return
+	}
+	values.Del(AuthIdKey)
+	s.Cache.AuthResponses <- &AuthSuccess{
+		Id:      id,
+		Content: AuthContent(values),
+	}
+	io.WriteString(wr, ClosePage)
 }
 
 func (s *Server) Handler() http.Handler {

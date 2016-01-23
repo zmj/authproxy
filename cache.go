@@ -1,6 +1,11 @@
 package main
 
 import (
+	"encoding/json"
+	//	"fmt"
+	"io"
+	"net/url"
+	"strconv"
 	"time"
 )
 
@@ -11,7 +16,7 @@ var (
 )
 
 type AuthId int
-type AuthContent map[string]string
+type AuthContent url.Values
 
 type PollRequest struct {
 	Id       AuthId
@@ -142,4 +147,18 @@ var lastAuthId = 0 // randomize this
 func NewId() AuthId {
 	lastAuthId += 1
 	return AuthId(lastAuthId)
+}
+
+func ParseId(s string) (AuthId, error) {
+	i, err := strconv.Atoi(s)
+	return AuthId(i), err
+}
+
+func (c *AuthContent) WriteTo(wr io.Writer) (int64, error) {
+	bytes, err := json.Marshal(c)
+	if err != nil {
+		return 0, err
+	}
+	written, err := wr.Write(bytes)
+	return int64(written), err
 }
