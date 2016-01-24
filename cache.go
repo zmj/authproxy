@@ -111,7 +111,10 @@ func (c *Cache) Cache() {
 				auths[req.Id] = &Auth{Id: req.Id, Started: time.Now()}
 			}
 		case authResp := <-c.AuthResponses:
-			auth := auths[authResp.Id]
+			auth, exists := auths[authResp.Id]
+			if !exists {
+				continue
+			}
 			auth.Finish(authResp)
 			for _, req := range auth.Requests {
 				req.Response <- auth.SuccessResponse()
