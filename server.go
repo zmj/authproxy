@@ -34,16 +34,15 @@ type Server struct {
 }
 
 func (s *Server) NewAuth(wr http.ResponseWriter, req *http.Request) {
-	c := make(chan AuthId)
-	s.Cache.NewAuthRequests <- &NewAuthRequest{c}
-	id := <-c
+	id, err := ParseId(req.URL.Query().Get(AuthIdKey))
 	loginUrl, err := url.ParseRequestURI(req.URL.Query().Get(LoginUrlKey))
 	if err != nil {
 		http.Error(wr, err.Error(), http.StatusBadRequest)
 		return
 	}
+	s.Cache.NewAuthRequests <- &NewAuthRequest{id}
 	redirectParamName := req.URL.Query().Get(RedirectUrlKey)
-	redirectUrl := fmt.Sprintf("%v%v?%v=%v", req.Host, CompletePrefix, AuthIdKey, id)
+	redirectUrl := fmt.Sprintf("http://%v%v?%v=%v", req.Host, CompletePrefix, AuthIdKey, id)
 	q := loginUrl.Query()
 	q.Set(redirectParamName, redirectUrl)
 	loginUrl.RawQuery = q.Encode()
