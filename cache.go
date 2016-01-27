@@ -5,6 +5,7 @@ import (
 	//	"fmt"
 	"io"
 	"net/url"
+	"strconv"
 	"time"
 )
 
@@ -14,7 +15,7 @@ var (
 	Cleanup        = 1 * time.Minute
 )
 
-type AuthId string
+type AuthId int
 type AuthContent url.Values
 
 type PollRequest struct {
@@ -29,7 +30,7 @@ type PollResponse struct {
 }
 
 type NewAuthRequest struct {
-	Id AuthId
+	Response chan<- AuthId
 }
 
 type AuthSuccess struct {
@@ -70,6 +71,21 @@ func (a *Auth) ExpiresAt() time.Time {
 	return a.Started.Add(ExpireAuth)
 }
 
+func NewAuth() *Auth {
+	return &Auth{
+		Id:      NewId(),
+		Started: time.Now(),
+	}
+}
+
+func (a *Auth) AddRequest(poll *PollRequest) *Auth {
+	if a == nil {
+		a = NewAuth()
+	}
+	a.Requests = append(a.Requests, poll)
+	return a
+}
+
 func (a *Auth) SuccessResponse() *PollResponse {
 	return &PollResponse{Found: true, Content: a.Content}
 }
@@ -98,18 +114,16 @@ func (c *Cache) Cache() {
 		select {
 		case req := <-c.PollRequests:
 			req.Received = time.Now()
-			auth, exists := auths[req.Id]
+			auth := auths[req.Id]
 			if auth.IsFinished() {
 				req.Response <- auth.SuccessResponse()
-			} else if exists {
-				auth.Requests = append(auth.Requests, req)
 			} else {
-				auths[req.Id] = &Auth{Id: req.Id, Started: time.Now()}
+				auths[req.Id] = auth.AddRequest(req)
 			}
-		case req := <-c.NewAuthRequests:
-			if _, exists := auths[req.Id]; !exists {
-				auths[req.Id] = &Auth{Id: req.Id, Started: time.Now()}
-			}
+		case authReq := <-c.NewAuthRequests:
+			auth := NewAuth()
+			auths[auth.Id] = auth
+			authReq.Response <- auth.Id
 		case authResp := <-c.AuthResponses:
 			auth, exists := auths[authResp.Id]
 			if !exists {
@@ -131,8 +145,16 @@ func (c *Cache) Cache() {
 	}
 }
 
+var lastAuthId = 0 // randomize this
+
+func NewId() AuthId {
+	lastAuthId += 1
+	return AuthId(lastAuthId)
+}
+
 func ParseId(s string) (AuthId, error) {
-	return AuthId(s), nil
+	i, err := strconv.Atoi(s)
+	return AuthId(i), err
 }
 
 func (c *AuthContent) WriteTo(wr io.Writer) (int64, error) {
