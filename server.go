@@ -41,15 +41,15 @@ func (s *Server) NewAuth(wr http.ResponseWriter, req *http.Request) {
 	c := make(chan AuthId)
 	s.Cache.NewAuthRequests <- &NewAuthRequest{c}
 	id := <-c
-	redirectParamName := req.URL.Query().Get(RedirectUrlKey)
-	redirectUrl := fmt.Sprintf("%v%v?%v=%v", req.Host, CompletePrefix, AuthIdKey, id)
+	redirectParamName := req.FormValue(RedirectUrlKey)
+	redirectUrl := fmt.Sprintf("http://%v%v?%v=%v", req.Host, CompletePrefix, AuthIdKey, id)
 
 	cookie := &http.Cookie{Name: AuthIdKey, Value: id.String(), HttpOnly: true}
 	http.SetCookie(wr, cookie)
 	q := loginUrl.Query()
 	q.Set(redirectParamName, redirectUrl)
 	loginUrl.RawQuery = q.Encode()
-	wr.Write([]byte(loginUrl.String()))
+	wr.Write([]byte(url.QueryEscape(loginUrl.String())))
 }
 
 func (s *Server) Poll(wr http.ResponseWriter, req *http.Request) {
