@@ -8,9 +8,8 @@ import (
 )
 
 const (
-	PollPrefix     = "/authproxy/poll"
 	CompletePrefix = "/authproxy/complete"
-	NewAuthPrefix  = "/authproxy/auth"
+	AuthPrefix     = "/authproxy/auth"
 
 	AuthIdKey      = "apid"
 	LoginUrlKey    = "loginurl"
@@ -44,14 +43,22 @@ func (s *Server) NewAuth(wr http.ResponseWriter, req *http.Request) {
 	}
 	redirectParamName := req.URL.Query().Get(RedirectUrlKey)
 	redirectUrl := fmt.Sprintf("%v%v?%v=%v", req.Host, CompletePrefix, AuthIdKey, id)
+
+	cookie := &http.Cookie{Name: AuthIdKey, Value: id.String(), HttpOnly: true}
+	http.SetCookie(wr, cookie)
 	q := loginUrl.Query()
 	q.Set(redirectParamName, redirectUrl)
 	loginUrl.RawQuery = q.Encode()
-	http.Redirect(wr, req, loginUrl.String(), http.StatusFound)
+	wr.Write([]byte(loginUrl.String()))
 }
 
 func (s *Server) Poll(wr http.ResponseWriter, req *http.Request) {
-	id, err := ParseId(req.URL.Query().Get(AuthIdKey))
+	cookie, err := req.Cookie(AuthIdKey)
+	if err != nil {
+		http.Error(wr, err.Error(), http.StatusBadRequest)
+		return
+	}
+	id, err := ParseId(cookie.Value)
 	if err != nil {
 		http.Error(wr, err.Error(), http.StatusBadRequest)
 		return
@@ -64,6 +71,17 @@ func (s *Server) Poll(wr http.ResponseWriter, req *http.Request) {
 		return
 	}
 	resp.Content.WriteTo(wr)
+}
+
+func (s *Server) Auth(wr http.ResponseWriter, req *http.Request) {
+	switch req.Method {
+	case "POST", "PUT":
+		s.NewAuth(wr, req)
+	case "GET", "":
+		s.Poll(wr, req)
+	default:
+		http.Error(wr, "huh", http.StatusBadRequest)
+	}
 }
 
 func (s *Server) Complete(wr http.ResponseWriter, req *http.Request) {
@@ -83,8 +101,7 @@ func (s *Server) Complete(wr http.ResponseWriter, req *http.Request) {
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc(NewAuthPrefix, s.NewAuth)
+	mux.HandleFunc(AuthPrefix, s.Auth)
 	mux.HandleFunc(CompletePrefix, s.Complete)
-	mux.HandleFunc(PollPrefix, s.Poll)
 	return mux
 }

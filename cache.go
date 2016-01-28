@@ -157,6 +157,10 @@ func ParseId(s string) (AuthId, error) {
 	return AuthId(i), err
 }
 
+func (a AuthId) String() string {
+	return strconv.Itoa(int(a))
+}
+
 func (c *AuthContent) WriteTo(wr io.Writer) (int64, error) {
 	bytes, err := json.Marshal(c)
 	if err != nil {
