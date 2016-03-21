@@ -15,7 +15,7 @@ const (
 	LoginUrlKey    = "loginurl"
 	RedirectUrlKey = "redirecturlkey"
 
-	ClosePage = `<html><script>window.close();</script></html>`
+	ClosePage = `<html><body>Done! You may close this page.</body></html>`
 )
 
 func main() {
