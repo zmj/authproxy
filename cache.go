@@ -161,8 +161,15 @@ func (a AuthId) String() string {
 	return strconv.Itoa(int(a))
 }
 
-func (c *AuthContent) WriteTo(wr io.Writer) (int64, error) {
-	bytes, err := json.Marshal(c)
+func (c AuthContent) WriteTo(wr io.Writer) (int64, error) {
+	response := make(map[string]string)
+	for k, v := range c {
+		if len(v) > 0 {
+			response[k] = v[0]
+		}
+	}
+
+	bytes, err := json.Marshal(response)
 	if err != nil {
 		return 0, err
 	}
